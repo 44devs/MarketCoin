@@ -494,6 +494,17 @@ function toggleRebirth() {
     }
 }
 
+function toggleInfo() {
+    const modal = document.getElementById('info-modal');
+    if (modal.style.display === 'flex') {
+        modal.classList.remove('visible');
+        setTimeout(() => { modal.style.display = 'none'; }, 300);
+    } else {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('visible'), 10);
+    }
+}
+
 function updateRebirthModalUI() {
     document.getElementById('ui-multiplier-modal').innerText = rebirthMultiplier + 'x';
     const btnRebirth = document.getElementById('btn-rebirth-modal');
