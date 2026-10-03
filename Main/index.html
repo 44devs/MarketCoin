@@ -10,7 +10,7 @@
 <body>
 
 <div id="intro-screen">44devs</div>
- 
+
 <div id="notification-container">
     <div id="notification">
         <span id="notification-text">Error: Launch Your Coin First.</span>
@@ -23,6 +23,24 @@
         <div id="ach-notification-title"><span id="ach-title-text">Achievement Unlocked!</span></div>
         <div id="ach-desc-text">Description</div>
         <div class="ach-progress-bar" id="ach-progress"></div>
+    </div>
+</div>
+
+<div id="sessions-modal" class="custom-modal">
+    <div class="modal-box">
+        <h2>Sessions</h2>
+        <div class="sessions-list" id="sessions-list"></div>
+        <button class="market-btn" onclick="showNewSessionForm()" style="margin-bottom: 12px;">+ New Session</button>
+        <button class="close-modal-btn" id="sessions-close-btn" onclick="closeSessions()">Close</button>
+    </div>
+</div>
+
+<div id="new-session-modal" class="custom-modal">
+    <div class="modal-box">
+        <h2>Name Your Session</h2>
+        <input type="text" id="new-session-name" class="session-input" placeholder="My Session" maxlength="30" autocomplete="off">
+        <button class="market-btn" onclick="confirmNewSession()" style="margin-bottom: 10px;">Create</button>
+        <button class="close-modal-btn" onclick="closeNewSessionForm()">Cancel</button>
     </div>
 </div>
 
@@ -75,7 +93,7 @@
 <div id="game-container">
     <header>
         <div id="game-title">MarketCoin</div>
-        <div style="cursor: pointer; color: #ff5555;" onclick="location.reload()">Exit</div>
+        <div style="cursor: pointer;" onclick="openSessions()">Sessions</div>
     </header>
 
     <main>
