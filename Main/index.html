@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MarketCoin</title>
+<link rel="icon" type="image/png" href="../Textures/Icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -57,6 +58,17 @@
         </div>
         <button id="btn-rebirth-modal" class="market-btn" onclick="doRebirth()" disabled style="margin-bottom: 15px;">Need 1.0K Fans</button>
         <button class="close-modal-btn" onclick="toggleRebirth()">Close</button>
+    </div>
+</div>
+
+<div id="info-modal" class="custom-modal">
+    <div class="modal-box">
+        <h2>Information</h2>
+        <div class="info-box">
+            <p class="info-version">v0.0.1</p>
+            <p class="info-author">Made By 44devs</p>
+        </div>
+        <button class="close-modal-btn" onclick="toggleInfo()">Close</button>
     </div>
 </div>
 
@@ -137,7 +149,7 @@
                 <span id="rebirth-badge" class="rebirth-badge hidden">!</span>
             </div>
         </div>
-        <div class="footer-btn" onclick="showTopNotification('MarketCoin Game v1.0 by 44devs', false)">Info</div>
+        <div class="footer-btn" onclick="toggleInfo()">Info</div>
     </footer>
 </div>
 
