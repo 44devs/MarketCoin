@@ -72,7 +72,7 @@
         <div class="rebirth-info-box">
             <p>Current Multiplier: <strong id="ui-multiplier-modal">1x</strong></p>
             <p>Next Rebirth Requirement: <strong id="ui-next-rebirth-modal">1.0K</strong> Fans</p>
-            <p style="font-size: 14px; color: #888; margin-top: 10px;">Rebirthing resets money, fans, and upgrades, but grants a permanent multiplier, a 60-second Boom Phase, unlocks a new shop page, AND introduces a new market challenge. <br><br><strong style="color: #FFC107;">⚠ Shop prices increase by 1.4x with each Rebirth!</strong></p>
+            <p style="font-size: 14px; color: #888; margin-top: 10px;">Rebirthing resets money, fans, and upgrades, but grants a permanent multiplier, a 60-second Boom Phase, and unlocks a new shop page. <br><br><strong style="color: #FFC107;">⚠ Shop prices increase by 1.4x with each Rebirth!</strong></p>
         </div>
         <button id="btn-rebirth-modal" class="market-btn" onclick="doRebirth()" disabled style="margin-bottom: 15px;">Need 1.0K Fans</button>
         <button class="close-modal-btn" onclick="toggleRebirth()">Close</button>
@@ -93,7 +93,10 @@
 <div id="game-container">
     <header>
         <div id="game-title">MarketCoin</div>
-        <div style="cursor: pointer;" onclick="openSessions()">Sessions</div>
+        <div class="header-actions">
+            <div class="header-btn" id="pause-btn" onclick="togglePause()">Pause</div>
+            <div class="header-btn" onclick="openSessions()">Sessions</div>
+        </div>
     </header>
 
     <main>
@@ -133,6 +136,11 @@
                         </svg>
                         <div class="lock-text">Rebirth to Unlock Competitors</div>
                     </div>
+
+                    <div id="pause-overlay">
+                        <div class="pause-text">PAUSED</div>
+                        <div class="pause-hint">Click Pause again to resume</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -149,7 +157,7 @@
 
                 <div id="shop-pagination" class="hidden">
                     <span id="btn-page-prev" class="page-btn" onclick="changeShopPage(-1)">&lt;-</span>
-                    <span id="page-display">1 / 4</span>
+                    <span id="page-display">1 / 8</span>
                     <span id="btn-page-next" class="page-btn" onclick="changeShopPage(1)">&gt;-</span>
                 </div>
 
