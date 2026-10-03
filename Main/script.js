@@ -30,6 +30,7 @@ let hackerTimer = 0;
 let hackerSpawnCooldown = 30;
 
 let gameInterval;
+let autoSaveInterval;
 let notificationInterval;
 let topTimeout;
 let achTimeout;
@@ -42,6 +43,10 @@ let nextCompetitorId = 1;
 let competitorSpawnTimer = 0;
 const MAX_COMPETITORS = 3;
 const COMPETITOR_NAMES = ['CryptoCorp', 'Blockchain Bros', 'MoonShot Inc', 'Degen Capital', 'RugPull Co', 'Pump & Dump', 'Whale Alert', 'FOMO Fund', 'HODL Holdings', 'Stonks Ltd', 'Wolf of Web3', 'Token Titans'];
+
+let currentSessionId = null;
+let pendingSessionName = null;
+let gameStarted = false;
 
 function getDifficultyData() {
     const r = rebirthLevel;
@@ -160,6 +165,569 @@ function calculateStats() {
     return { totalClickPower, totalMoneyPerSec, totalFanPerSec };
 }
 
+function readSaveData() {
+    try {
+        const raw = localStorage.getItem('marketcoin_save');
+        if (!raw) return { sessions: [], currentId: null };
+        const parsed = JSON.parse(raw);
+        return {
+            sessions: parsed.sessions || [],
+            currentId: parsed.currentId || null
+        };
+    } catch (e) {
+        return { sessions: [], currentId: null };
+    }
+}
+
+function writeSaveData(data) {
+    try {
+        localStorage.setItem('marketcoin_save', JSON.stringify(data));
+    } catch (e) {
+        console.warn("Could not save", e);
+    }
+}
+
+function collectState() {
+    return {
+        money: money,
+        fans: fans,
+        isLaunched: isLaunched,
+        selectedCoin: selectedCoin,
+        hasCrashed: hasCrashed,
+        rebirthLevel: rebirthLevel,
+        rebirthMultiplier: rebirthMultiplier,
+        lastRebirthNotified: lastRebirthNotified,
+        boomPhaseActive: boomPhaseActive,
+        boomPhaseTimer: boomPhaseTimer,
+        regulatorTimer: regulatorTimer,
+        hackerActive: hackerActive,
+        hackerTimer: hackerTimer,
+        hackerSpawnCooldown: hackerSpawnCooldown,
+        currentShopPage: currentShopPage,
+        shopLevels: Object.assign({}, shopLevels),
+        competitors: JSON.parse(JSON.stringify(competitors)),
+        nextCompetitorId: nextCompetitorId,
+        competitorSpawnTimer: competitorSpawnTimer,
+        currentPrice: currentPrice,
+        history: JSON.parse(JSON.stringify(history)),
+        unlockedAchievements: unlockedAchievements.slice(),
+        currentView: currentView
+    };
+}
+
+function applyState(state) {
+    money = state.money || 0;
+    fans = state.fans || 0;
+    isLaunched = state.isLaunched || false;
+    selectedCoin = state.selectedCoin || "Bitcoin";
+    hasCrashed = state.hasCrashed || false;
+    rebirthLevel = state.rebirthLevel || 0;
+    rebirthMultiplier = state.rebirthMultiplier || 1;
+    lastRebirthNotified = (state.lastRebirthNotified !== undefined) ? state.lastRebirthNotified : -1;
+    boomPhaseActive = state.boomPhaseActive || false;
+    boomPhaseTimer = state.boomPhaseTimer || 0;
+    regulatorTimer = state.regulatorTimer || 0;
+    hackerActive = state.hackerActive || false;
+    hackerTimer = state.hackerTimer || 0;
+    hackerSpawnCooldown = state.hackerSpawnCooldown || 30;
+    currentShopPage = state.currentShopPage || 0;
+    shopLevels = state.shopLevels || {};
+    competitors = state.competitors || [];
+    nextCompetitorId = state.nextCompetitorId || 1;
+    competitorSpawnTimer = state.competitorSpawnTimer || 0;
+    currentPrice = state.currentPrice || 100;
+    history = state.history || [];
+    if (!history || history.length === 0) {
+        history = [];
+        for (let i = 0; i < MAX_HISTORY; i++) history.push({ price: currentPrice, up: true });
+    }
+    unlockedAchievements = state.unlockedAchievements || [];
+
+    document.querySelector('.euro-btn').textContent = coinSymbols[selectedCoin] || "€";
+
+    if (isLaunched) {
+        document.getElementById('ui-users-container').classList.remove('hidden');
+        document.getElementById('btn-launch').classList.add('hidden');
+    } else {
+        document.getElementById('ui-users-container').classList.add('hidden');
+        document.getElementById('btn-launch').classList.remove('hidden');
+    }
+
+    currentView = state.currentView || 0;
+    updateView();
+    updateUI();
+    renderShop();
+    drawChart();
+}
+
+function saveGame() {
+    if (!currentSessionId) return;
+    const data = readSaveData();
+    const session = data.sessions.find(s => s.id === currentSessionId);
+    if (!session) return;
+    session.state = collectState();
+    session.lastPlayed = Date.now();
+    data.currentId = currentSessionId;
+    writeSaveData(data);
+}
+
+function startAutoSave() {
+    if (autoSaveInterval) clearInterval(autoSaveInterval);
+    autoSaveInterval = setInterval(saveGame, 5000);
+}
+
+function timeAgo(timestamp) {
+    if (!timestamp) return "never played";
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 10) return "just now";
+    if (seconds < 60) return seconds + " seconds ago";
+    if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";
+    if (seconds < 86400) return Math.floor(seconds / 3600) + "h ago";
+    return Math.floor(seconds / 86400) + "d ago";
+}
+
+function renderSessionsList() {
+    const list = document.getElementById('sessions-list');
+    const data = readSaveData();
+    list.innerHTML = '';
+
+    if (data.sessions.length === 0) {
+        list.innerHTML = `<div class="session-empty">No sessions yet. Click "New Session" to start a new journey.</div>`;
+        return;
+    }
+
+    data.sessions.sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+
+    data.sessions.forEach(session => {
+        const item = document.createElement('div');
+        item.className = 'session-item' + (session.id === currentSessionId ? ' active' : '');
+
+        const info = document.createElement('div');
+        info.className = 'session-info';
+        const name = document.createElement('div');
+        name.className = 'session-name';
+        name.textContent = session.name;
+        const meta = document.createElement('div');
+        meta.className = 'session-meta';
+        const st = session.state || {};
+        meta.textContent = `€${formatNumber(st.money || 0)} • ${formatNumber(st.fans || 0)} fans • Rebirth ${st.rebirthLevel || 0} • ${timeAgo(session.lastPlayed)}`;
+        info.appendChild(name);
+        info.appendChild(meta);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'session-delete';
+        delBtn.textContent = 'Delete';
+        delBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteSession(session.id);
+        };
+
+        item.appendChild(info);
+        item.appendChild(delBtn);
+        item.onclick = () => loadSession(session.id);
+        list.appendChild(item);
+    });
+}
+
+function openSessions(initial) {
+    const modal = document.getElementById('sessions-modal');
+    renderSessionsList();
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('visible'), 10);
+
+    const closeBtn = document.getElementById('sessions-close-btn');
+    if (initial && !currentSessionId) {
+        closeBtn.classList.add('hidden');
+    } else {
+        closeBtn.classList.remove('hidden');
+    }
+}
+
+function closeSessions() {
+    if (!currentSessionId) return;
+    const modal = document.getElementById('sessions-modal');
+    modal.classList.remove('visible');
+    setTimeout(() => { modal.style.display = 'none'; }, 300);
+}
+
+function showNewSessionForm() {
+    document.getElementById('new-session-name').value = '';
+    const modal = document.getElementById('new-session-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => {
+        modal.classList.add('visible');
+        document.getElementById('new-session-name').focus();
+    }, 10);
+}
+
+function closeNewSessionForm() {
+    const modal = document.getElementById('new-session-modal');
+    modal.classList.remove('visible');
+    setTimeout(() => { modal.style.display = 'none'; }, 300);
+}
+
+function confirmNewSession() {
+    const name = (document.getElementById('new-session-name').value || '').trim() || "Unnamed Session";
+    pendingSessionName = name;
+    closeNewSessionForm();
+
+    if (!gameStarted) {
+        closeSessions();
+        setTimeout(() => showCoinPopup(), 400);
+    } else {
+        createSession(name);
+        closeSessions();
+        showTopNotification(`Created session "${name}"`, false);
+    }
+}
+
+function createSession(name) {
+    const data = readSaveData();
+    const id = "session_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+    const newSession = {
+        id: id,
+        name: name,
+        createdAt: Date.now(),
+        lastPlayed: Date.now(),
+        state: null
+    };
+    data.sessions.push(newSession);
+    data.currentId = id;
+    writeSaveData(data);
+    currentSessionId = id;
+    saveGame();
+    return id;
+}
+
+function loadSession(id) {
+    const data = readSaveData();
+    const session = data.sessions.find(s => s.id === id);
+    if (!session) {
+        showTopNotification("Session not found.", false);
+        return;
+    }
+
+    if (currentSessionId && currentSessionId !== id) saveGame();
+
+    currentSessionId = id;
+    data.currentId = id;
+    writeSaveData(data);
+
+    if (session.state) {
+        applyState(session.state);
+    } else {
+        applyState({});
+    }
+
+    closeSessions();
+
+    if (!gameStarted) {
+        gameStarted = true;
+        startGameLoop();
+        startAutoSave();
+        document.getElementById('game-container').classList.add('visible');
+    }
+
+    showTopNotification(`Loaded "${session.name}"`, false);
+}
+
+function deleteSession(id) {
+    const data = readSaveData();
+    const session = data.sessions.find(s => s.id === id);
+    if (!session) return;
+
+    if (data.sessions.length === 1 && id === currentSessionId) {
+        showTopNotification("Cannot delete the last session.", false);
+        return;
+    }
+
+    data.sessions = data.sessions.filter(s => s.id !== id);
+
+    if (data.currentId === id) {
+        const next = data.sessions[0];
+        data.currentId = next ? next.id : null;
+        currentSessionId = data.currentId;
+        if (next && next.state) applyState(next.state);
+    }
+
+    writeSaveData(data);
+    renderSessionsList();
+    showTopNotification(`Deleted "${session.name}"`, false);
+}
+
+function playIntro() {
+    const intro = document.getElementById('intro-screen');
+    setTimeout(() => { intro.classList.add('visible'); }, 100);
+    setTimeout(() => {
+        intro.classList.remove('visible');
+        setTimeout(() => {
+            intro.style.display = 'none';
+            document.getElementById('game-container').classList.add('visible');
+            openSessions(true);
+        }, 2000);
+    }, 3000);
+}
+
+function showCoinPopup() {
+    const popup = document.getElementById('coin-popup');
+    popup.style.display = 'flex';
+    setTimeout(() => popup.classList.add('visible'), 50);
+}
+
+function selectCoin(coinName) {
+    selectedCoin = coinName;
+    document.querySelector('.euro-btn').textContent = coinSymbols[coinName];
+
+    createSession(pendingSessionName || "New Session");
+    pendingSessionName = null;
+
+    const popup = document.getElementById('coin-popup');
+    popup.classList.remove('visible');
+
+    setTimeout(() => {
+        popup.style.display = 'none';
+        if (!gameStarted) {
+            gameStarted = true;
+            startGameLoop();
+            startAutoSave();
+        }
+        unlockAchievement('welcome', 'Welcome!', 'Selected your first coin.');
+        saveGame();
+    }, 500);
+}
+
+function showTopNotification(message, isCountdown) {
+    const notif = document.getElementById('notification-container');
+    const textSpan = document.getElementById('notification-text');
+    const countSpan = document.getElementById('countdown');
+    textSpan.innerText = message;
+    if (topTimeout) clearTimeout(topTimeout);
+    if (notificationInterval) clearInterval(notificationInterval);
+    if (isCountdown) {
+        countSpan.style.display = 'inline';
+        let count = 4;
+        countSpan.innerText = `(${count})`;
+        notificationInterval = setInterval(() => {
+            count--;
+            if (count > 0) {
+                countSpan.innerText = `(${count})`;
+            } else {
+                clearInterval(notificationInterval);
+                notif.classList.remove('show');
+            }
+        }, 1000);
+    } else {
+        countSpan.style.display = 'none';
+        topTimeout = setTimeout(() => notif.classList.remove('show'), 3000);
+    }
+    notif.classList.add('show');
+}
+
+function showAchNotification(title, desc) {
+    const notif = document.getElementById('ach-notification-container');
+    const progressBar = document.getElementById('ach-progress');
+    document.getElementById('ach-title-text').innerText = title;
+    document.getElementById('ach-desc-text').innerText = desc;
+    progressBar.classList.remove('active');
+    void progressBar.offsetWidth;
+    notif.classList.add('show');
+    progressBar.classList.add('active');
+    if (achTimeout) clearTimeout(achTimeout);
+    achTimeout = setTimeout(() => {
+        notif.classList.remove('show');
+        progressBar.classList.remove('active');
+    }, 7000);
+}
+
+function unlockAchievement(id, title, desc) {
+    if (unlockedAchievements.includes(id)) return;
+    unlockedAchievements.push(id);
+    renderAchievements();
+    showAchNotification(title, desc);
+    saveGame();
+}
+
+function renderAchievements() {
+    const list = document.getElementById('achievements-list');
+    list.innerHTML = '';
+    allAchievements.forEach(ach => {
+        const isUnlocked = unlockedAchievements.includes(ach.id);
+        const item = document.createElement('div');
+        item.className = `achievement-item ${isUnlocked ? 'unlocked' : ''}`;
+        item.innerHTML = `
+            <div class="achievement-info"><h3>${ach.title}</h3><p>${ach.desc}</p></div>
+            <div class="achievement-status">${isUnlocked ? 'Unlocked' : 'Locked'}</div>
+        `;
+        list.appendChild(item);
+    });
+}
+
+function toggleAchievements() {
+    const modal = document.getElementById('achievements-modal');
+    if (modal.style.display === 'flex') {
+        modal.classList.remove('visible');
+        setTimeout(() => { modal.style.display = 'none'; }, 300);
+    } else {
+        renderAchievements();
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('visible'), 10);
+    }
+}
+
+function toggleRebirth() {
+    const modal = document.getElementById('rebirth-modal');
+    if (modal.style.display === 'flex') {
+        modal.classList.remove('visible');
+        setTimeout(() => { modal.style.display = 'none'; }, 300);
+    } else {
+        updateRebirthModalUI();
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('visible'), 10);
+    }
+}
+
+function toggleInfo() {
+    const modal = document.getElementById('info-modal');
+    if (modal.style.display === 'flex') {
+        modal.classList.remove('visible');
+        setTimeout(() => { modal.style.display = 'none'; }, 300);
+    } else {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('visible'), 10);
+    }
+}
+
+function updateRebirthModalUI() {
+    document.getElementById('ui-multiplier-modal').innerText = rebirthMultiplier + 'x';
+    const btnRebirth = document.getElementById('btn-rebirth-modal');
+    const nextReq = rebirthReqs[rebirthLevel];
+    if (rebirthLevel >= rebirthReqs.length) {
+        btnRebirth.disabled = true;
+        btnRebirth.innerText = "Max Rebirth Level Reached!";
+        document.getElementById('ui-next-rebirth-modal').innerText = "MAX";
+    } else {
+        document.getElementById('ui-next-rebirth-modal').innerText = formatNumber(nextReq);
+        if (fans >= nextReq) {
+            btnRebirth.disabled = false;
+            btnRebirth.innerText = "Rebirth Now!";
+            btnRebirth.style.backgroundColor = "#4CAF50";
+            btnRebirth.style.borderColor = "#81C784";
+        } else {
+            btnRebirth.disabled = true;
+            btnRebirth.innerText = `Need ${formatNumber(nextReq)} Fans`;
+            btnRebirth.style.backgroundColor = "#6a1b9a";
+            btnRebirth.style.borderColor = "#8e24aa";
+        }
+    }
+}
+
+function switchView(direction) {
+    currentView += direction;
+    if (currentView < 0) currentView = 2;
+    if (currentView > 2) currentView = 0;
+    updateView();
+    saveGame();
+}
+
+function updateView() {
+    document.getElementById('clicker-view').style.display = 'none';
+    document.getElementById('chart-view').style.display = 'none';
+    document.getElementById('competitors-view').style.display = 'none';
+    document.getElementById('lock-overlay').style.display = 'none';
+    document.getElementById('competitors-lock-overlay').style.display = 'none';
+
+    if (currentView === 0) {
+        document.getElementById('clicker-view').style.display = 'flex';
+        document.getElementById('view-title').innerText = "Clicker";
+    } else if (currentView === 1) {
+        document.getElementById('chart-view').style.display = 'flex';
+        document.getElementById('view-title').innerText = "Diagramm";
+        if (!isLaunched) {
+            document.getElementById('lock-overlay').style.display = 'flex';
+            showTopNotification("Error: Launch Your Coin First.", true);
+        }
+    } else if (currentView === 2) {
+        document.getElementById('competitors-view').style.display = 'flex';
+        document.getElementById('view-title').innerText = "Competitors";
+        if (rebirthLevel < 1) {
+            document.getElementById('competitors-lock-overlay').style.display = 'flex';
+            showTopNotification("Error: Rebirth to Unlock Competitors.", true);
+        }
+        renderCompetitors();
+    }
+    currentShopPage = 0;
+    renderShop();
+}
+
+function changeShopPage(direction) {
+    let maxPage = Math.min(rebirthLevel, TOTAL_PAGES - 1);
+    currentShopPage += direction;
+    if (currentShopPage < 0) currentShopPage = 0;
+    if (currentShopPage > maxPage) currentShopPage = maxPage;
+    renderShop();
+}
+
+function renderShop() {
+    const shopContainer = document.getElementById('shop-items');
+    const pagination = document.getElementById('shop-pagination');
+    const pageDisplay = document.getElementById('page-display');
+    const btnPrev = document.getElementById('btn-page-prev');
+    const btnNext = document.getElementById('btn-page-next');
+
+    if (!isLaunched || currentView === 2) {
+        shopContainer.classList.add('hidden');
+        pagination.classList.add('hidden');
+        return;
+    }
+    shopContainer.classList.remove('hidden');
+    pagination.classList.remove('hidden');
+
+    let items = (currentView === 1) ? diagramShopItems : clickerShopItems;
+    let maxPage = Math.min(rebirthLevel, TOTAL_PAGES - 1);
+    if (currentShopPage > maxPage) currentShopPage = maxPage;
+
+    pageDisplay.innerText = `${currentShopPage + 1} / ${TOTAL_PAGES}`;
+
+    if (currentShopPage === 0) btnPrev.classList.add('disabled'); else btnPrev.classList.remove('disabled');
+    if (currentShopPage === maxPage) btnNext.classList.add('disabled'); else btnNext.classList.remove('disabled');
+
+    let startIndex = currentShopPage * 4;
+    let endIndex = startIndex + 4;
+    let pageItems = items.slice(startIndex, endIndex);
+
+    shopContainer.innerHTML = '';
+    pageItems.forEach(item => {
+        const level = shopLevels[item.id] || 0;
+        const cost = getShopItemCost(item);
+        const btn = document.createElement('button');
+        btn.className = 'market-btn shop-item-btn';
+        btn.innerHTML = `
+            <div class="shop-item-title">${item.name} (Lvl ${level})</div>
+            <div class="shop-item-desc">${item.desc}</div>
+            <div class="shop-item-cost">Cost: €${formatNumber(cost)}</div>
+        `;
+        btn.onclick = () => buyShopItem(item.id);
+        if (money < cost) btn.disabled = true;
+        shopContainer.appendChild(btn);
+    });
+}
+
+function buyShopItem(itemId) {
+    let item = [...clickerShopItems, ...diagramShopItems].find(i => i.id === itemId);
+    if (!item) return;
+    let cost = getShopItemCost(item);
+    if (money >= cost) {
+        money -= cost;
+        shopLevels[itemId] = (shopLevels[itemId] || 0) + 1;
+        if (item.type === 'fanInstant') fans += item.val * shopLevels[itemId];
+        updateUI();
+        renderShop();
+        saveGame();
+    } else {
+        showTopNotification("Not enough money!", false);
+    }
+}
+
 function spawnCompetitor() {
     if (competitors.length >= MAX_COMPETITORS) return;
     const usedNames = competitors.map(c => c.name);
@@ -261,6 +829,7 @@ function attackCompetitor(id) {
     }
     updateUI();
     renderCompetitors();
+    saveGame();
 }
 
 function getHackerCost() {
@@ -316,6 +885,7 @@ function hackCompetitor(id) {
     hackerSpawnCooldown = 90 + Math.floor(Math.random() * 60);
     renderCompetitors();
     updateUI();
+    saveGame();
 }
 
 function renderCompetitors() {
@@ -375,269 +945,13 @@ function renderCompetitors() {
     container.innerHTML = html;
 }
 
-function playIntro() {
-    const intro = document.getElementById('intro-screen');
-    setTimeout(() => { intro.classList.add('visible'); }, 100);
-    setTimeout(() => {
-        intro.classList.remove('visible');
-        setTimeout(() => {
-            intro.style.display = 'none';
-            document.getElementById('game-container').classList.add('visible');
-            showCoinPopup();
-        }, 2000);
-    }, 3000);
-}
-
-function showCoinPopup() {
-    const popup = document.getElementById('coin-popup');
-    setTimeout(() => { popup.classList.add('visible'); }, 50);
-}
-
-function selectCoin(coinName) {
-    selectedCoin = coinName;
-    document.querySelector('.euro-btn').textContent = coinSymbols[coinName];
-    unlockAchievement('welcome', 'Welcome!', 'Selected your first coin.');
-    const popup = document.getElementById('coin-popup');
-    popup.classList.remove('visible');
-    setTimeout(() => {
-        popup.style.display = 'none';
-        startGameLoop();
-    }, 500);
-}
-
-function showTopNotification(message, isCountdown = false) {
-    const notif = document.getElementById('notification-container');
-    const textSpan = document.getElementById('notification-text');
-    const countSpan = document.getElementById('countdown');
-    textSpan.innerText = message;
-    if (topTimeout) clearTimeout(topTimeout);
-    if (notificationInterval) clearInterval(notificationInterval);
-    if (isCountdown) {
-        countSpan.style.display = 'inline';
-        let count = 4;
-        countSpan.innerText = `(${count})`;
-        notificationInterval = setInterval(() => {
-            count--;
-            if (count > 0) {
-                countSpan.innerText = `(${count})`;
-            } else {
-                clearInterval(notificationInterval);
-                notif.classList.remove('show');
-            }
-        }, 1000);
-    } else {
-        countSpan.style.display = 'none';
-        topTimeout = setTimeout(() => notif.classList.remove('show'), 3000);
-    }
-    notif.classList.add('show');
-}
-
-function showAchNotification(title, desc) {
-    const notif = document.getElementById('ach-notification-container');
-    const progressBar = document.getElementById('ach-progress');
-    document.getElementById('ach-title-text').innerText = title;
-    document.getElementById('ach-desc-text').innerText = desc;
-    progressBar.classList.remove('active');
-    void progressBar.offsetWidth;
-    notif.classList.add('show');
-    progressBar.classList.add('active');
-    if (achTimeout) clearTimeout(achTimeout);
-    achTimeout = setTimeout(() => {
-        notif.classList.remove('show');
-        progressBar.classList.remove('active');
-    }, 7000);
-}
-
-function unlockAchievement(id, title, desc) {
-    if (unlockedAchievements.includes(id)) return;
-    unlockedAchievements.push(id);
-    renderAchievements();
-    showAchNotification(title, desc);
-}
-
-function renderAchievements() {
-    const list = document.getElementById('achievements-list');
-    list.innerHTML = '';
-    allAchievements.forEach(ach => {
-        const isUnlocked = unlockedAchievements.includes(ach.id);
-        const item = document.createElement('div');
-        item.className = `achievement-item ${isUnlocked ? 'unlocked' : ''}`;
-        item.innerHTML = `
-            <div class="achievement-info"><h3>${ach.title}</h3><p>${ach.desc}</p></div>
-            <div class="achievement-status">${isUnlocked ? 'Unlocked' : 'Locked'}</div>
-        `;
-        list.appendChild(item);
-    });
-}
-
-function toggleAchievements() {
-    const modal = document.getElementById('achievements-modal');
-    if (modal.style.display === 'flex') {
-        modal.classList.remove('visible');
-        setTimeout(() => { modal.style.display = 'none'; }, 300);
-    } else {
-        renderAchievements();
-        modal.style.display = 'flex';
-        setTimeout(() => modal.classList.add('visible'), 10);
-    }
-}
-
-function toggleRebirth() {
-    const modal = document.getElementById('rebirth-modal');
-    if (modal.style.display === 'flex') {
-        modal.classList.remove('visible');
-        setTimeout(() => { modal.style.display = 'none'; }, 300);
-    } else {
-        updateRebirthModalUI();
-        modal.style.display = 'flex';
-        setTimeout(() => modal.classList.add('visible'), 10);
-    }
-}
-
-function toggleInfo() {
-    const modal = document.getElementById('info-modal');
-    if (modal.style.display === 'flex') {
-        modal.classList.remove('visible');
-        setTimeout(() => { modal.style.display = 'none'; }, 300);
-    } else {
-        modal.style.display = 'flex';
-        setTimeout(() => modal.classList.add('visible'), 10);
-    }
-}
-
-function updateRebirthModalUI() {
-    document.getElementById('ui-multiplier-modal').innerText = rebirthMultiplier + 'x';
-    const btnRebirth = document.getElementById('btn-rebirth-modal');
-    const nextReq = rebirthReqs[rebirthLevel];
-    if (rebirthLevel >= rebirthReqs.length) {
-        btnRebirth.disabled = true;
-        btnRebirth.innerText = "Max Rebirth Level Reached!";
-        document.getElementById('ui-next-rebirth-modal').innerText = "MAX";
-    } else {
-        document.getElementById('ui-next-rebirth-modal').innerText = formatNumber(nextReq);
-        if (fans >= nextReq) {
-            btnRebirth.disabled = false;
-            btnRebirth.innerText = "Rebirth Now!";
-            btnRebirth.style.backgroundColor = "#4CAF50";
-            btnRebirth.style.borderColor = "#81C784";
-        } else {
-            btnRebirth.disabled = true;
-            btnRebirth.innerText = `Need ${formatNumber(nextReq)} Fans`;
-            btnRebirth.style.backgroundColor = "#6a1b9a";
-            btnRebirth.style.borderColor = "#8e24aa";
-        }
-    }
-}
-
-function switchView(direction) {
-    currentView += direction;
-    if (currentView < 0) currentView = 2;
-    if (currentView > 2) currentView = 0;
-    updateView();
-}
-
-function updateView() {
-    document.getElementById('clicker-view').style.display = 'none';
-    document.getElementById('chart-view').style.display = 'none';
-    document.getElementById('competitors-view').style.display = 'none';
-    document.getElementById('lock-overlay').style.display = 'none';
-    document.getElementById('competitors-lock-overlay').style.display = 'none';
-
-    if (currentView === 0) {
-        document.getElementById('clicker-view').style.display = 'flex';
-        document.getElementById('view-title').innerText = "Clicker";
-    } else if (currentView === 1) {
-        document.getElementById('chart-view').style.display = 'flex';
-        document.getElementById('view-title').innerText = "Diagramm";
-        if (!isLaunched) {
-            document.getElementById('lock-overlay').style.display = 'flex';
-            showTopNotification("Error: Launch Your Coin First.", true);
-        }
-    } else if (currentView === 2) {
-        document.getElementById('competitors-view').style.display = 'flex';
-        document.getElementById('view-title').innerText = "Competitors";
-        if (rebirthLevel < 1) {
-            document.getElementById('competitors-lock-overlay').style.display = 'flex';
-            showTopNotification("Error: Rebirth to Unlock Competitors.", true);
-        }
-        renderCompetitors();
-    }
-    currentShopPage = 0;
-    renderShop();
-}
-
-function changeShopPage(direction) {
-    let maxPage = Math.min(rebirthLevel, TOTAL_PAGES - 1);
-    currentShopPage += direction;
-    if (currentShopPage < 0) currentShopPage = 0;
-    if (currentShopPage > maxPage) currentShopPage = maxPage;
-    renderShop();
-}
-
-function renderShop() {
-    const shopContainer = document.getElementById('shop-items');
-    const pagination = document.getElementById('shop-pagination');
-    const pageDisplay = document.getElementById('page-display');
-    const btnPrev = document.getElementById('btn-page-prev');
-    const btnNext = document.getElementById('btn-page-next');
-
-    if (!isLaunched || currentView === 2) {
-        shopContainer.classList.add('hidden');
-        pagination.classList.add('hidden');
-        return;
-    }
-    shopContainer.classList.remove('hidden');
-    pagination.classList.remove('hidden');
-
-    let items = (currentView === 1) ? diagramShopItems : clickerShopItems;
-    let maxPage = Math.min(rebirthLevel, TOTAL_PAGES - 1);
-    if (currentShopPage > maxPage) currentShopPage = maxPage;
-
-    pageDisplay.innerText = `${currentShopPage + 1} / ${TOTAL_PAGES}`;
-
-    if (currentShopPage === 0) btnPrev.classList.add('disabled'); else btnPrev.classList.remove('disabled');
-    if (currentShopPage === maxPage) btnNext.classList.add('disabled'); else btnNext.classList.remove('disabled');
-
-    let startIndex = currentShopPage * 4;
-    let endIndex = startIndex + 4;
-    let pageItems = items.slice(startIndex, endIndex);
-
-    shopContainer.innerHTML = '';
-    pageItems.forEach(item => {
-        const level = shopLevels[item.id] || 0;
-        const cost = getShopItemCost(item);
-        const btn = document.createElement('button');
-        btn.className = 'market-btn shop-item-btn';
-        btn.innerHTML = `
-            <div class="shop-item-title">${item.name} (Lvl ${level})</div>
-            <div class="shop-item-desc">${item.desc}</div>
-            <div class="shop-item-cost">Cost: €${formatNumber(cost)}</div>
-        `;
-        btn.onclick = () => buyShopItem(item.id);
-        if (money < cost) btn.disabled = true;
-        shopContainer.appendChild(btn);
-    });
-}
-
-function buyShopItem(itemId) {
-    let item = [...clickerShopItems, ...diagramShopItems].find(i => i.id === itemId);
-    if (!item) return;
-    let cost = getShopItemCost(item);
-    if (money >= cost) {
-        money -= cost;
-        shopLevels[itemId] = (shopLevels[itemId] || 0) + 1;
-        if (item.type === 'fanInstant') fans += item.val * shopLevels[itemId];
-        updateUI();
-        renderShop();
-    } else {
-        showTopNotification("Not enough money!", false);
-    }
-}
-
 function startGameLoop() {
-    currentPrice = 100;
-    history = [];
-    for (let i = 0; i < MAX_HISTORY; i++) history.push({ price: currentPrice, up: true });
+    if (gameInterval) clearInterval(gameInterval);
+    currentPrice = currentPrice || 100;
+    if (!history || history.length === 0) {
+        history = [];
+        for (let i = 0; i < MAX_HISTORY; i++) history.push({ price: currentPrice, up: true });
+    }
     drawChart();
     updateUI();
 
@@ -734,6 +1048,7 @@ function launchCoin() {
         unlockAchievement('journey', 'Beginning of The Journey', 'Launched your coin for the first time.');
         showTopNotification("Coin Launched! Market is now open.", false);
         renderShop();
+        saveGame();
     }
 }
 
@@ -779,6 +1094,7 @@ function doRebirth() {
         renderShop();
         drawChart();
         toggleRebirth();
+        saveGame();
     }
 }
 
@@ -820,6 +1136,7 @@ function updateMarketPrice() {
 
 function drawChart() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!history || history.length === 0) return;
     let minPrice = Math.min(...history.map(h => h.price));
     let maxPrice = Math.max(...history.map(h => h.price));
     let padding = (maxPrice - minPrice) * 0.1 || 10;
@@ -845,5 +1162,9 @@ function drawChart() {
         ctx.fillRect(x + 2, y, barWidth - 4, barHeight);
     });
 }
+
+window.addEventListener('beforeunload', () => {
+    if (currentSessionId) saveGame();
+});
 
 window.onload = playIntro;
