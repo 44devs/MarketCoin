@@ -249,7 +249,8 @@ function collectState() {
         currentPrice: currentPrice,
         history: JSON.parse(JSON.stringify(history)),
         unlockedAchievements: unlockedAchievements.slice(),
-        currentView: currentView
+        currentView: currentView,
+        savedAt: Date.now()
     };
 }
 
@@ -330,7 +331,7 @@ function resetGameState() {
     document.getElementById('btn-launch').classList.remove('hidden');
     document.getElementById('pause-btn').classList.remove('paused');
     document.getElementById('pause-btn').innerText = 'Pause';
-    document.getElementById('pause-overlay').classList.remove('visible');
+    document.getElementById('pause-modal').classList.remove('visible');
 
     currentView = 0;
     updateView();
@@ -353,7 +354,7 @@ function saveGame() {
 
 function startAutoSave() {
     if (autoSaveInterval) clearInterval(autoSaveInterval);
-    autoSaveInterval = setInterval(saveGame, 5000);
+    autoSaveInterval = setInterval(saveGame, 2000);
 }
 
 function timeAgo(timestamp) {
@@ -508,7 +509,7 @@ function loadSession(id) {
     isPaused = false;
     document.getElementById('pause-btn').classList.remove('paused');
     document.getElementById('pause-btn').innerText = 'Pause';
-    document.getElementById('pause-overlay').classList.remove('visible');
+    document.getElementById('pause-modal').classList.remove('visible');
 
     closeSessions();
 
@@ -520,6 +521,7 @@ function loadSession(id) {
     }
 
     showTopNotification(`Loaded "${session.name}"`, false);
+    saveGame();
 }
 
 function deleteSession(id) {
@@ -549,15 +551,18 @@ function deleteSession(id) {
 function togglePause() {
     isPaused = !isPaused;
     const btn = document.getElementById('pause-btn');
-    const overlay = document.getElementById('pause-overlay');
+    const modal = document.getElementById('pause-modal');
     if (isPaused) {
         btn.classList.add('paused');
         btn.innerText = 'Resume';
-        overlay.classList.add('visible');
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('visible'), 10);
     } else {
         btn.classList.remove('paused');
         btn.innerText = 'Pause';
-        overlay.classList.remove('visible');
+        modal.classList.remove('visible');
+        setTimeout(() => { modal.style.display = 'none'; }, 300);
+        saveGame();
     }
 }
 
@@ -1132,6 +1137,7 @@ function startGameLoop() {
         checkRebirthReady();
         updateUI();
         renderShop();
+        saveGame();
     }, 1000);
 }
 
@@ -1267,6 +1273,14 @@ function drawChart() {
 
 window.addEventListener('beforeunload', () => {
     if (currentSessionId) saveGame();
+});
+
+window.addEventListener('pagehide', () => {
+    if (currentSessionId) saveGame();
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && currentSessionId) saveGame();
 });
 
 window.onload = playIntro;
