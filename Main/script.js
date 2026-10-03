@@ -4,6 +4,7 @@ let isLaunched = false;
 let currentView = 0;
 let hasCrashed = false;
 let selectedCoin = "Bitcoin";
+let isPaused = false;
 
 const coinSymbols = {
     Bitcoin: "₿",
@@ -14,8 +15,8 @@ const coinSymbols = {
 
 let rebirthLevel = 0;
 let rebirthMultiplier = 1;
-const rebirthReqs = [1000, 4000, 10000, 100000, 1000000];
-const TOTAL_PAGES = 4;
+const rebirthReqs = [1000, 4000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000];
+const TOTAL_PAGES = 8;
 let lastRebirthNotified = -1;
 
 let boomPhaseActive = false;
@@ -42,7 +43,7 @@ let competitors = [];
 let nextCompetitorId = 1;
 let competitorSpawnTimer = 0;
 const MAX_COMPETITORS = 3;
-const COMPETITOR_NAMES = ['CryptoCorp', 'Blockchain Bros', 'MoonShot Inc', 'Degen Capital', 'RugPull Co', 'Pump & Dump', 'Whale Alert', 'FOMO Fund', 'HODL Holdings', 'Stonks Ltd', 'Wolf of Web3', 'Token Titans'];
+const COMPETITOR_NAMES = ['CryptoCorp', 'Blockchain Bros', 'MoonShot Inc', 'Degen Capital', 'RugPull Co', 'Pump & Dump', 'Whale Alert', 'FOMO Fund', 'HODL Holdings', 'Stonks Ltd', 'Wolf of Web3', 'Token Titans', 'Ape Capital', 'Diamond Hands Inc'];
 
 let currentSessionId = null;
 let pendingSessionName = null;
@@ -51,13 +52,13 @@ let gameStarted = false;
 function getDifficultyData() {
     const r = rebirthLevel;
     return {
-        crashChance: 0.01 + r * 0.005,
-        crashSeverity: 0.5 + Math.min(0.2, r * 0.05),
-        competitorSpawnInterval: Math.max(15, 45 - r * 5),
-        competitorGrowth: 1.5 + r * 0.5,
+        crashChance: 0.01 + r * 0.004,
+        crashSeverity: 0.5 + Math.min(0.2, r * 0.04),
+        competitorSpawnInterval: Math.max(15, 45 - r * 4),
+        competitorGrowth: 1.5 + r * 0.4,
         competitorHits: r >= 3 ? 2 : 1,
-        regulatorActive: r >= 4,
-        megaCorpActive: r >= 5,
+        regulatorActive: r >= 5,
+        megaCorpActive: r >= 7,
         hackerUnlocked: r >= 2
     };
 }
@@ -78,7 +79,23 @@ const clickerShopItems = [
     { id: 'c13', name: 'Crypto Miner', desc: 'x3 all money (stacks)', baseCost: 500000000, costMult: 2.8, req: 3, type: 'moneyMult', val: 3 },
     { id: 'c14', name: 'Quantum Computer', desc: 'x5 all money (stacks)', baseCost: 2500000000, costMult: 3.0, req: 3, type: 'moneyMult', val: 5 },
     { id: 'c15', name: 'Time Machine', desc: 'x10 all money (stacks)', baseCost: 15000000000, costMult: 3.2, req: 3, type: 'moneyMult', val: 10 },
-    { id: 'c16', name: 'Money Printer', desc: 'x25 all money (stacks)', baseCost: 75000000000, costMult: 3.5, req: 3, type: 'moneyMult', val: 25 }
+    { id: 'c16', name: 'Money Printer', desc: 'x25 all money (stacks)', baseCost: 75000000000, costMult: 3.5, req: 3, type: 'moneyMult', val: 25 },
+    { id: 'c17', name: 'Neural Link', desc: '+50000 click power per level', baseCost: 500000000000, costMult: 3.0, req: 4, type: 'clickAdd', val: 50000 },
+    { id: 'c18', name: 'Market Oracle', desc: 'x5 click power (stacks)', baseCost: 2500000000000, costMult: 3.2, req: 4, type: 'clickMult', val: 5 },
+    { id: 'c19', name: 'Infinity Engine', desc: '+500000 money/sec per level', baseCost: 15000000000000, costMult: 3.3, req: 4, type: 'moneyPassive', val: 500000 },
+    { id: 'c20', name: 'Reality Hacker', desc: 'x10 all money (stacks)', baseCost: 100000000000000, costMult: 3.5, req: 4, type: 'moneyMult', val: 10 },
+    { id: 'c21', name: 'Dark Pool Access', desc: '+5000000 click power per level', baseCost: 1000000000000000, costMult: 3.5, req: 5, type: 'clickAdd', val: 5000000 },
+    { id: 'c22', name: 'Central Bank', desc: 'x10 click power (stacks)', baseCost: 5000000000000000, costMult: 3.5, req: 5, type: 'clickMult', val: 10 },
+    { id: 'c23', name: 'Time Lord', desc: '+50000000 money/sec per level', baseCost: 25000000000000000, costMult: 3.5, req: 5, type: 'moneyPassive', val: 50000000 },
+    { id: 'c24', name: 'Money God', desc: 'x50 all money (stacks)', baseCost: 100000000000000000, costMult: 4.0, req: 5, type: 'moneyMult', val: 50 },
+    { id: 'c25', name: 'Singularity', desc: 'x100 click power (stacks)', baseCost: 1000000000000000000, costMult: 4.5, req: 6, type: 'clickMult', val: 100 },
+    { id: 'c26', name: 'Universe Wallet', desc: 'x1000 click power (stacks)', baseCost: 5000000000000000000, costMult: 5.0, req: 6, type: 'clickMult', val: 1000 },
+    { id: 'c27', name: 'God Mode', desc: 'x100 all money (stacks)', baseCost: 25000000000000000000, costMult: 5.0, req: 6, type: 'moneyMult', val: 100 },
+    { id: 'c28', name: 'Ascension', desc: 'x1000 all money (stacks)', baseCost: 100000000000000000000, costMult: 6.0, req: 6, type: 'moneyMult', val: 1000 },
+    { id: 'c29', name: 'Cosmic Ledger', desc: 'x10000 all money (stacks)', baseCost: 1000000000000000000000, costMult: 7.0, req: 7, type: 'moneyMult', val: 10000 },
+    { id: 'c30', name: 'Dimensional Bank', desc: 'x100000 all money (stacks)', baseCost: 10000000000000000000000, costMult: 8.0, req: 7, type: 'moneyMult', val: 100000 },
+    { id: 'c31', name: 'Infinity Vault', desc: 'x1000000 all money (stacks)', baseCost: 100000000000000000000000, costMult: 10.0, req: 7, type: 'moneyMult', val: 1000000 },
+    { id: 'c32', name: 'Omnipotence', desc: 'x10000000 all money (stacks)', baseCost: 1000000000000000000000000, costMult: 12.0, req: 7, type: 'moneyMult', val: 10000000 }
 ];
 
 const diagramShopItems = [
@@ -97,7 +114,23 @@ const diagramShopItems = [
     { id: 'd13', name: 'Global PR', desc: 'x10 fan generation (stacks)', baseCost: 500000000000, costMult: 3.0, req: 3, type: 'fanMult', val: 10 },
     { id: 'd14', name: 'Worldwide Campaign', desc: 'x25 fan generation (stacks)', baseCost: 2500000000000, costMult: 3.2, req: 3, type: 'fanMult', val: 25 },
     { id: 'd15', name: 'Cultural Phenomenon', desc: 'x50 fan generation (stacks)', baseCost: 15000000000000, costMult: 3.5, req: 3, type: 'fanMult', val: 50 },
-    { id: 'd16', name: 'Internet Takeover', desc: 'x100 fan generation (stacks)', baseCost: 75000000000000, costMult: 4.0, req: 3, type: 'fanMult', val: 100 }
+    { id: 'd16', name: 'Internet Takeover', desc: 'x100 fan generation (stacks)', baseCost: 75000000000000, costMult: 4.0, req: 3, type: 'fanMult', val: 100 },
+    { id: 'd17', name: 'Cult Following', desc: '+1000000 fans/sec per level', baseCost: 500000000000000, costMult: 3.0, req: 4, type: 'fanPassive', val: 1000000 },
+    { id: 'd18', name: 'Religious Movement', desc: '+10000000 fans/sec per level', baseCost: 2500000000000000, costMult: 3.2, req: 4, type: 'fanPassive', val: 10000000 },
+    { id: 'd19', name: 'Reality TV Empire', desc: 'x250 fan generation (stacks)', baseCost: 15000000000000000, costMult: 3.5, req: 4, type: 'fanMult', val: 250 },
+    { id: 'd20', name: 'Global Movement', desc: 'x1000 fan generation (stacks)', baseCost: 100000000000000000, costMult: 3.8, req: 4, type: 'fanMult', val: 1000 },
+    { id: 'd21', name: 'Brainwashing', desc: '+500000000 fans/sec per level', baseCost: 1000000000000000000, costMult: 4.0, req: 5, type: 'fanPassive', val: 500000000 },
+    { id: 'd22', name: 'Hive Mind', desc: 'x5000 fan generation (stacks)', baseCost: 5000000000000000000, costMult: 4.0, req: 5, type: 'fanMult', val: 5000 },
+    { id: 'd23', name: 'Propaganda Machine', desc: 'x25000 fan generation (stacks)', baseCost: 25000000000000000000, costMult: 4.0, req: 5, type: 'fanMult', val: 25000 },
+    { id: 'd24', name: 'World Domination', desc: 'x100000 fan generation (stacks)', baseCost: 100000000000000000000, costMult: 4.5, req: 5, type: 'fanMult', val: 100000 },
+    { id: 'd25', name: 'Cosmic Influence', desc: 'x1000000 fan generation (stacks)', baseCost: 1000000000000000000000, costMult: 5.0, req: 6, type: 'fanMult', val: 1000000 },
+    { id: 'd26', name: 'Galactic Fans', desc: 'x10000000 fan generation (stacks)', baseCost: 5000000000000000000000, costMult: 5.5, req: 6, type: 'fanMult', val: 10000000 },
+    { id: 'd27', name: 'Universal Love', desc: 'x100000000 fan generation (stacks)', baseCost: 25000000000000000000000, costMult: 6.0, req: 6, type: 'fanMult', val: 100000000 },
+    { id: 'd28', name: 'Ascended Status', desc: 'x1000000000 fan generation (stacks)', baseCost: 100000000000000000000000, costMult: 7.0, req: 6, type: 'fanMult', val: 1000000000 },
+    { id: 'd29', name: 'Godlike Aura', desc: 'x10000000000 fan generation (stacks)', baseCost: 1000000000000000000000000, costMult: 8.0, req: 7, type: 'fanMult', val: 10000000000 },
+    { id: 'd30', name: 'Divine Presence', desc: 'x100000000000 fan generation (stacks)', baseCost: 10000000000000000000000000, costMult: 10.0, req: 7, type: 'fanMult', val: 100000000000 },
+    { id: 'd31', name: 'Total Worship', desc: 'x1000000000000 fan generation (stacks)', baseCost: 100000000000000000000000000, costMult: 12.0, req: 7, type: 'fanMult', val: 1000000000000 },
+    { id: 'd32', name: 'Omnipresent Fame', desc: 'x10000000000000 fan generation (stacks)', baseCost: 1000000000000000000000000000, costMult: 15.0, req: 7, type: 'fanMult', val: 10000000000000 }
 ];
 
 let currentPrice = 100;
@@ -115,11 +148,16 @@ const allAchievements = [
     { id: 'rebirth3', title: 'Veteran Trader', desc: 'Complete your third Rebirth.' },
     { id: 'rebirth4', title: 'Market Legend', desc: 'Complete your fourth Rebirth.' },
     { id: 'rebirth5', title: 'Cryptocurrency King', desc: 'Complete your fifth Rebirth.' },
+    { id: 'rebirth6', title: 'Titan of Finance', desc: 'Complete your sixth Rebirth.' },
+    { id: 'rebirth7', title: 'Cosmic Investor', desc: 'Complete your seventh Rebirth.' },
+    { id: 'rebirth8', title: 'God of Markets', desc: 'Complete your eighth Rebirth.' },
     { id: 'hacker', title: 'Black Hat', desc: 'Hire the hacker for the first time.' }
 ];
 let unlockedAchievements = [];
 
 function formatNumber(num) {
+    if (num >= 1e24) return (num / 1e24).toFixed(2) + 'Sp';
+    if (num >= 1e21) return (num / 1e21).toFixed(2) + 'Sx';
     if (num >= 1e18) return (num / 1e18).toFixed(2) + 'Qi';
     if (num >= 1e15) return (num / 1e15).toFixed(2) + 'Q';
     if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
@@ -260,6 +298,48 @@ function applyState(state) {
     drawChart();
 }
 
+function resetGameState() {
+    money = 0;
+    fans = 0;
+    isLaunched = false;
+    currentView = 0;
+    hasCrashed = false;
+    selectedCoin = "Bitcoin";
+    isPaused = false;
+    rebirthLevel = 0;
+    rebirthMultiplier = 1;
+    lastRebirthNotified = -1;
+    boomPhaseActive = false;
+    boomPhaseTimer = 0;
+    regulatorTimer = 0;
+    hackerActive = false;
+    hackerTimer = 0;
+    hackerSpawnCooldown = 30;
+    currentShopPage = 0;
+    shopLevels = {};
+    competitors = [];
+    nextCompetitorId = 1;
+    competitorSpawnTimer = 0;
+    currentPrice = 100;
+    history = [];
+    for (let i = 0; i < MAX_HISTORY; i++) history.push({ price: currentPrice, up: true });
+    unlockedAchievements = [];
+
+    document.querySelector('.euro-btn').textContent = "€";
+    document.getElementById('ui-users-container').classList.add('hidden');
+    document.getElementById('btn-launch').classList.remove('hidden');
+    document.getElementById('pause-btn').classList.remove('paused');
+    document.getElementById('pause-btn').innerText = 'Pause';
+    document.getElementById('pause-overlay').classList.remove('visible');
+
+    currentView = 0;
+    updateView();
+    updateUI();
+    renderShop();
+    drawChart();
+    renderAchievements();
+}
+
 function saveGame() {
     if (!currentSessionId) return;
     const data = readSaveData();
@@ -374,13 +454,15 @@ function confirmNewSession() {
         closeSessions();
         setTimeout(() => showCoinPopup(), 400);
     } else {
-        createSession(name);
+        createSession(name, true);
         closeSessions();
         showTopNotification(`Created session "${name}"`, false);
+        setTimeout(() => showCoinPopup(), 400);
     }
 }
 
-function createSession(name) {
+function createSession(name, reset) {
+    if (currentSessionId) saveGame();
     const data = readSaveData();
     const id = "session_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
     const newSession = {
@@ -394,6 +476,11 @@ function createSession(name) {
     data.currentId = id;
     writeSaveData(data);
     currentSessionId = id;
+
+    if (reset) {
+        resetGameState();
+    }
+
     saveGame();
     return id;
 }
@@ -417,6 +504,11 @@ function loadSession(id) {
     } else {
         applyState({});
     }
+
+    isPaused = false;
+    document.getElementById('pause-btn').classList.remove('paused');
+    document.getElementById('pause-btn').innerText = 'Pause';
+    document.getElementById('pause-overlay').classList.remove('visible');
 
     closeSessions();
 
@@ -454,6 +546,21 @@ function deleteSession(id) {
     showTopNotification(`Deleted "${session.name}"`, false);
 }
 
+function togglePause() {
+    isPaused = !isPaused;
+    const btn = document.getElementById('pause-btn');
+    const overlay = document.getElementById('pause-overlay');
+    if (isPaused) {
+        btn.classList.add('paused');
+        btn.innerText = 'Resume';
+        overlay.classList.add('visible');
+    } else {
+        btn.classList.remove('paused');
+        btn.innerText = 'Pause';
+        overlay.classList.remove('visible');
+    }
+}
+
 function playIntro() {
     const intro = document.getElementById('intro-screen');
     setTimeout(() => { intro.classList.add('visible'); }, 100);
@@ -477,7 +584,11 @@ function selectCoin(coinName) {
     selectedCoin = coinName;
     document.querySelector('.euro-btn').textContent = coinSymbols[coinName];
 
-    createSession(pendingSessionName || "New Session");
+    if (!currentSessionId) {
+        createSession(pendingSessionName || "New Session", false);
+    } else {
+        saveGame();
+    }
     pendingSessionName = null;
 
     const popup = document.getElementById('coin-popup');
@@ -955,6 +1066,8 @@ function startGameLoop() {
     updateUI();
 
     gameInterval = setInterval(() => {
+        if (isPaused) return;
+
         const difficulty = getDifficultyData();
 
         if (boomPhaseActive) {
@@ -1031,6 +1144,7 @@ function checkRebirthReady() {
 }
 
 function clickEuro() {
+    if (isPaused) return;
     let stats = calculateStats();
     let debuff = getCompetitorDebuff();
     let boomBonus = boomPhaseActive ? 2 : 1;
@@ -1072,20 +1186,9 @@ function doRebirth() {
 
         showTopNotification(`REBIRTH! Multiplier now ${rebirthMultiplier}x. BOOM PHASE!`, false);
 
-        const achTitles = ['New Beginnings', 'Reborn Again', 'Veteran Trader', 'Market Legend', 'Cryptocurrency King'];
-        const achDescs = ['Complete your first Rebirth.', 'Complete your second Rebirth.', 'Complete your third Rebirth.', 'Complete your fourth Rebirth.', 'Complete your fifth Rebirth.'];
-        if (rebirthLevel <= 5) unlockAchievement('rebirth' + rebirthLevel, achTitles[rebirthLevel - 1], achDescs[rebirthLevel - 1]);
-
-        const mechanics = [
-            null,
-            { name: 'Competition', desc: 'Competitors now enter the market. They reduce your income until defeated.' },
-            { name: 'Volatility', desc: 'Market crashes hit harder and more often. Also: the HACKER becomes available — check the Competitors view!' },
-            { name: 'Hostile', desc: 'Competitors are now shielded — 2 attacks needed to defeat them.' },
-            { name: 'Regulation', desc: 'The SEC will randomly seize 25% of your money every 60 seconds.' },
-            { name: 'Cutthroat', desc: 'Competitors can merge into MEGA CORPS with 200% influence.' }
-        ];
-        const mech = mechanics[rebirthLevel];
-        if (mech) setTimeout(() => showAchNotification(`New Challenge: ${mech.name}`, mech.desc), 2000);
+        const achTitles = ['New Beginnings', 'Reborn Again', 'Veteran Trader', 'Market Legend', 'Cryptocurrency King', 'Titan of Finance', 'Cosmic Investor', 'God of Markets'];
+        const achDescs = ['Complete your first Rebirth.', 'Complete your second Rebirth.', 'Complete your third Rebirth.', 'Complete your fourth Rebirth.', 'Complete your fifth Rebirth.', 'Complete your sixth Rebirth.', 'Complete your seventh Rebirth.', 'Complete your eighth Rebirth.'];
+        if (rebirthLevel <= 8) unlockAchievement('rebirth' + rebirthLevel, achTitles[rebirthLevel - 1], achDescs[rebirthLevel - 1]);
 
         if (rebirthLevel === 1) setTimeout(() => spawnCompetitor(), 3000);
 
