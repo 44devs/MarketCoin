@@ -79,6 +79,18 @@
     </div>
 </div>
 
+<div id="pause-modal" class="custom-modal">
+    <div class="modal-box pause-modal-box">
+        <svg class="pause-lock-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <h2>Paused</h2>
+        <p class="pause-subtext">Your game is paused. Everything is still being saved.</p>
+        <button class="close-modal-btn" onclick="togglePause()">Resume</button>
+    </div>
+</div>
+
 <div id="info-modal" class="custom-modal">
     <div class="modal-box">
         <h2>Information</h2>
@@ -135,11 +147,6 @@
                             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                         </svg>
                         <div class="lock-text">Rebirth to Unlock Competitors</div>
-                    </div>
-
-                    <div id="pause-overlay">
-                        <div class="pause-text">PAUSED</div>
-                        <div class="pause-hint">Click Pause again to resume</div>
                     </div>
                 </div>
             </div>
