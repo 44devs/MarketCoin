@@ -344,7 +344,6 @@ function openSessions(initial) {
 }
 
 function closeSessions() {
-    if (!currentSessionId) return;
     const modal = document.getElementById('sessions-modal');
     modal.classList.remove('visible');
     setTimeout(() => { modal.style.display = 'none'; }, 300);
