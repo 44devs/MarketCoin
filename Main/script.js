@@ -35,6 +35,8 @@ let autoSaveInterval;
 let notificationInterval;
 let topTimeout;
 let achTimeout;
+let saveIndicatorTimeout;
+let clickSaveTimeout = null;
 
 let currentShopPage = 0;
 let shopLevels = {};
@@ -48,6 +50,9 @@ const COMPETITOR_NAMES = ['CryptoCorp', 'Blockchain Bros', 'MoonShot Inc', 'Dege
 let currentSessionId = null;
 let pendingSessionName = null;
 let gameStarted = false;
+
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+let fullscreenListenerAttached = false;
 
 function getDifficultyData() {
     const r = rebirthLevel;
@@ -332,6 +337,7 @@ function resetGameState() {
     document.getElementById('pause-btn').classList.remove('paused');
     document.getElementById('pause-btn').innerText = 'Pause';
     document.getElementById('pause-modal').classList.remove('visible');
+    document.getElementById('pause-modal').style.display = 'none';
 
     currentView = 0;
     updateView();
@@ -343,18 +349,34 @@ function resetGameState() {
 
 function saveGame() {
     if (!currentSessionId) return;
-    const data = readSaveData();
-    const session = data.sessions.find(s => s.id === currentSessionId);
-    if (!session) return;
-    session.state = collectState();
-    session.lastPlayed = Date.now();
-    data.currentId = currentSessionId;
-    writeSaveData(data);
+    try {
+        const data = readSaveData();
+        const session = data.sessions.find(s => s.id === currentSessionId);
+        if (!session) return;
+        session.state = collectState();
+        session.lastPlayed = Date.now();
+        data.currentId = currentSessionId;
+        writeSaveData(data);
+        flashSaveIndicator();
+    } catch (e) {
+        console.warn("Save failed", e);
+    }
+}
+
+function flashSaveIndicator() {
+    const el = document.getElementById('save-status');
+    if (!el) return;
+    el.textContent = '✓ Saved';
+    el.style.opacity = '1';
+    clearTimeout(saveIndicatorTimeout);
+    saveIndicatorTimeout = setTimeout(() => {
+        el.style.opacity = '0';
+    }, 1200);
 }
 
 function startAutoSave() {
     if (autoSaveInterval) clearInterval(autoSaveInterval);
-    autoSaveInterval = setInterval(saveGame, 2000);
+    autoSaveInterval = setInterval(saveGame, 1000);
 }
 
 function timeAgo(timestamp) {
@@ -510,6 +532,7 @@ function loadSession(id) {
     document.getElementById('pause-btn').classList.remove('paused');
     document.getElementById('pause-btn').innerText = 'Pause';
     document.getElementById('pause-modal').classList.remove('visible');
+    document.getElementById('pause-modal').style.display = 'none';
 
     closeSessions();
 
@@ -557,6 +580,7 @@ function togglePause() {
         btn.innerText = 'Resume';
         modal.style.display = 'flex';
         setTimeout(() => modal.classList.add('visible'), 10);
+        saveGame();
     } else {
         btn.classList.remove('paused');
         btn.innerText = 'Pause';
@@ -564,6 +588,55 @@ function togglePause() {
         setTimeout(() => { modal.style.display = 'none'; }, 300);
         saveGame();
     }
+}
+
+function requestAppFullscreen() {
+    const el = document.documentElement;
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+    if (isFs) return;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (!req) return;
+    try {
+        const promise = req.call(el);
+        if (promise && promise.catch) promise.catch(() => {});
+    } catch (e) {}
+}
+
+function setupMobileFullscreen() {
+    if (!isTouchDevice) return;
+
+    const onFirstTap = () => {
+        requestAppFullscreen();
+        document.removeEventListener('touchstart', onFirstTap);
+        document.removeEventListener('click', onFirstTap);
+    };
+    document.addEventListener('touchstart', onFirstTap, { once: true, passive: true });
+    document.addEventListener('click', onFirstTap, { once: true });
+
+    const onFsChange = () => {
+        const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+        if (!isFs && !fullscreenListenerAttached) {
+            fullscreenListenerAttached = true;
+            const reattach = () => {
+                fullscreenListenerAttached = false;
+                requestAppFullscreen();
+                document.removeEventListener('touchstart', reattach);
+                document.removeEventListener('click', reattach);
+            };
+            document.addEventListener('touchstart', reattach, { once: true, passive: true });
+            document.addEventListener('click', reattach, { once: true });
+        }
+    };
+
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+
+    window.addEventListener('orientationchange', () => {
+        setTimeout(() => window.scrollTo(0, 0), 300);
+    });
+
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 }
 
 function playIntro() {
@@ -574,6 +647,7 @@ function playIntro() {
         setTimeout(() => {
             intro.style.display = 'none';
             document.getElementById('game-container').classList.add('visible');
+            setupMobileFullscreen();
             openSessions(true);
         }, 2000);
     }, 3000);
@@ -1156,6 +1230,12 @@ function clickEuro() {
     let boomBonus = boomPhaseActive ? 2 : 1;
     money += stats.totalClickPower * debuff * boomBonus;
     updateUI();
+    if (!clickSaveTimeout) {
+        clickSaveTimeout = setTimeout(() => {
+            saveGame();
+            clickSaveTimeout = null;
+        }, 3000);
+    }
 }
 
 function launchCoin() {
